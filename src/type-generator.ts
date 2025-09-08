@@ -103,6 +103,7 @@ function getImports(manifest: cem.Package, options: JsxTypesOptions) {
               )
             : module.path;
         const uniqueExports: string[] = [];
+        let hasDefaultExport = false;
 
         module.exports?.forEach((e) => {
           const exportName = e.declaration.name;
@@ -111,28 +112,34 @@ function getImports(manifest: cem.Package, options: JsxTypesOptions) {
             return;
           }
           moduleNames.push(exportName);
-          uniqueExports.push(exportName);
+          
+          // Check if this is a default export and we're using defaultExport option
+          if (e.name === "default" && options.defaultExport) {
+            hasDefaultExport = true;
+          } else {
+            // Only add named exports to the list
+            uniqueExports.push(exportName);
+          }
         });
 
-        if (!uniqueExports?.length) {
+        if (!uniqueExports?.length && !hasDefaultExport) {
           return;
         }
 
-        if (options.defaultExport) {
-          uniqueExports.push(`default as ${component.name}`);
+        // Generate the correct import statement
+        let importStatement: string;
+        if (hasDefaultExport && uniqueExports.length > 0) {
+          // Default export with named exports: import DefaultExport, { namedExport } from "path"
+          importStatement = `import type ${component.name}, { ${uniqueExports.join(", ")} } from "${importPath}";`;
+        } else if (hasDefaultExport) {
+          // Only default export: import DefaultExport from "path"
+          importStatement = `import type ${component.name} from "${importPath}";`;
+        } else {
+          // Only named exports: import { namedExport } from "path"
+          importStatement = `import type { ${uniqueExports.join(", ")} } from "${importPath}";`;
         }
 
-        const exportList = options.defaultExport
-          ? uniqueExports
-              ?.filter((x) =>
-                options.defaultExport ? x !== component.name : false,
-              )
-              .join(", ")
-          : uniqueExports?.join(", ");
-
-        importTemplates.push(
-          `import type { ${exportList} } from "${importPath}";`,
-        );
+        importTemplates.push(importStatement);
       });
     }
   });
